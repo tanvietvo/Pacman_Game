@@ -74,14 +74,20 @@ void Error_Handler(void);
 #define INPUT_X2_GPIO_Port GPIOC
 #define INPUT_X3_Pin GPIO_PIN_5
 #define INPUT_X3_GPIO_Port GPIOC
-#define TOUCH_CS_Pin GPIO_PIN_12
-#define TOUCH_CS_GPIO_Port GPIOB
-#define TOUCH_IRQ_Pin GPIO_PIN_13
-#define TOUCH_IRQ_GPIO_Port GPIOB
 #define LD_LATCH_Pin GPIO_PIN_6
 #define LD_LATCH_GPIO_Port GPIOG
+#define TOUCH_CS_Pin GPIO_PIN_7
+#define TOUCH_CS_GPIO_Port GPIOG
+#define TOUCH_CLK_Pin GPIO_PIN_8
+#define TOUCH_CLK_GPIO_Port GPIOG
+#define TOUCH_IRQ_Pin GPIO_PIN_8
+#define TOUCH_IRQ_GPIO_Port GPIOC
+#define TOUCH_MOSI_Pin GPIO_PIN_9
+#define TOUCH_MOSI_GPIO_Port GPIOC
 #define FSMC_BLK_Pin GPIO_PIN_8
 #define FSMC_BLK_GPIO_Port GPIOA
+#define TOUCH_MISO_Pin GPIO_PIN_12
+#define TOUCH_MISO_GPIO_Port GPIOC
 #define BTN_LOAD_Pin GPIO_PIN_3
 #define BTN_LOAD_GPIO_Port GPIOD
 

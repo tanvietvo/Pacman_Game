@@ -170,6 +170,28 @@ void game_process(void) {
 		game_handler();
 		game_draw();
 	}
+//	// ---- DEBUG to find min/max of raw(x, y) ----
+//	uint16_t raw_x, raw_y;
+//	char buffer[30];
+//
+//	if (touch_read_raw_xy(&raw_x, &raw_y)) {
+//		// Nếu đang chạm, in tọa độ GỐC
+//		sprintf(buffer, "RAW X: %-5u", raw_x); // Dùng %-5u để căn lề
+//		lcd_show_string(10, 50, buffer, BLACK, BACKGROUND_COLOR, 16, 0);
+//
+//		sprintf(buffer, "RAW Y: %-5u", raw_y); // Dùng %-5u để căn lề
+//		lcd_show_string(10, 70, buffer, BLACK, BACKGROUND_COLOR, 16, 0);
+//	} else {
+//		// Nếu không chạm
+//		// Xóa dòng X (y=50)
+//		lcd_show_string(10, 50, "NOT TOUCHED ", BLACK, BACKGROUND_COLOR, 16, 0);
+//
+//		// **THÊM DÒNG NÀY ĐỂ XÓA DÒNG Y (y=70)**
+//		// Vẽ một chuỗi rỗng (dấu cách) để đè lên
+//		lcd_show_string(10, 70, "            ", BLACK, BACKGROUND_COLOR, 16, 0);
+//	}
+//
+//	HAL_Delay(50); // Delay một chút
 }
 
 /* Private Functions ---------------------------------------------------------*/
@@ -266,6 +288,20 @@ void pacman_direction_process(void) {
 		pacman.direction = LEFT;
 	else if (is_button_right())
 		pacman.direction = RIGHT;
+
+	uint16_t x, y;
+	// Check whether touch inside of the btn
+	if (touch_get_calibrated_xy(&x, &y))
+	{
+		if ((x >= BTN_UP_X1 && x <= BTN_UP_X2) && (y >= BTN_UP_Y1 && y <= BTN_UP_Y2))
+			pacman.direction = UP;
+		else if ((x >= BTN_DOWN_X1 && x <= BTN_DOWN_X2) && (y >= BTN_DOWN_Y1 && y <= BTN_DOWN_Y2))
+			pacman.direction = DOWN;
+		else if ((x >= BTN_LEFT_X1 && x <= BTN_LEFT_X2) && (y >= BTN_LEFT_Y1 && y <= BTN_LEFT_Y2))
+			pacman.direction = LEFT;
+		else if ((x >= BTN_RIGHT_X1 && x <= BTN_RIGHT_X2) && (y >= BTN_RIGHT_Y1 && y <= BTN_RIGHT_Y2))
+			pacman.direction = RIGHT;
+	}
 }
 
 void pacman_moving_process(void) {
@@ -500,8 +536,8 @@ uint8_t is_button_right(void) {
 void lcd_update_score(int score)
 {
 	char text_buffer[20];
-	uint8_t font_height = 16;
-	uint8_t font_width = font_height / 2;
+	uint8_t font_size = 16;
+	uint8_t font_width = font_size / 2;
 	uint16_t text_width;
 	uint16_t start_x;
 	uint16_t start_y = 10;
@@ -514,15 +550,21 @@ void lcd_update_score(int score)
 	else
 		start_x = 0;
 
-	lcd_fill(0, start_y, lcddev.width - 1, start_y + font_height, BACKGROUND_COLOR);
-	lcd_show_string(start_x, start_y, text_buffer, BLACK, BACKGROUND_COLOR, font_height, 0);
+	lcd_fill(0, start_y, lcddev.width - 1, start_y + font_size, BACKGROUND_COLOR);
+	lcd_show_string(start_x, start_y, text_buffer, BLACK, BACKGROUND_COLOR, font_size, 0);
 }
 
 void lcd_draw_control_button()
 {
-	lcd_draw_rectangle(75, lcddev.height - 10 - 30, 105, lcddev.height - 10, BLACK); // LEFT
-	lcd_draw_rectangle(105, lcddev.height - 10 - 30, 135, lcddev.height - 10, BLACK); // BOTTOM
-	lcd_draw_rectangle(135, lcddev.height - 10 - 30, 165, lcddev.height - 10, BLACK); // RIGHT
-	lcd_draw_rectangle(105, lcddev.height - 10 - 30 - 30, 135, lcddev.height - 10 - 30, BLACK); // UP
-	//lcd_show_string_center(0, 25, "^", BLACK, BACKGROUND_COLOR, 24, 0);
+	uint8_t  font_size = 12;
+
+	lcd_draw_button_with_text(BTN_UP_X1, BTN_UP_Y1, BTN_SIZE, BTN_SIZE, "UP", font_size, BLACK, BLACK, BACKGROUND_COLOR);
+	lcd_draw_button_with_text(BTN_LEFT_X1, BTN_LEFT_Y1, BTN_SIZE, BTN_SIZE, "LEFT", font_size, BLACK, BLACK, BACKGROUND_COLOR);
+	lcd_draw_button_with_text(BTN_DOWN_X1, BTN_DOWN_Y1, BTN_SIZE, BTN_SIZE, "DOWN", font_size, BLACK, BLACK, BACKGROUND_COLOR);
+	lcd_draw_button_with_text(BTN_RIGHT_X1, BTN_RIGHT_Y1, BTN_SIZE, BTN_SIZE, "RIGHT", font_size, BLACK, BLACK, BACKGROUND_COLOR);
+
+//	lcd_draw_rectangle(50, 275, 90, 315, BLACK); // LEFT
+//	lcd_draw_rectangle(100, 275, 140, 315, BLACK); // BOTTOM
+//	lcd_draw_rectangle(150, 275, 190, 315, BLACK); // RIGHT
+//	lcd_draw_rectangle(100, 225, 140, 265, BLACK); // UP
 }

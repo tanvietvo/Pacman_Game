@@ -99,7 +99,6 @@ int main(void)
   MX_SPI1_Init();
   MX_FSMC_Init();
   MX_TIM4_Init();
-  MX_SPI2_Init();
   /* USER CODE BEGIN 2 */
 	init_system();
 
@@ -179,6 +178,8 @@ void init_system() {
 
 	timer4_init();
 	timer4_set(1);
+
+	touch_init();
 
 	game_init();
 }

@@ -193,7 +193,7 @@ void lcd_show_char(uint16_t x, uint16_t y, uint8_t character, uint16_t fc,
 	lcd_set_address(x, y, x + sizex - 1, y + sizey - 1);
 	for (i = 0; i < TypefaceNum; i++) {
 		if (sizey == 12)
-			;
+			temp = ascii_1206[character][i];
 		else if (sizey == 16)
 			temp = ascii_1608[character][i];
 		else if (sizey == 24)
@@ -488,3 +488,26 @@ void lcd_show_string_center(uint16_t x, uint16_t y, char *str, uint16_t fc, uint
 	lcd_show_string(x + x1, y, str, fc, bc, sizey, mode);
 }
 
+void lcd_draw_button_with_text(uint16_t x1, uint16_t y1, uint16_t width, uint16_t height,
+                               char* text, uint8_t font_size,
+                               uint16_t border_color, uint16_t text_color, uint16_t background_color)
+{
+    lcd_draw_rectangle(x1, y1, x1 + width, y1 + height, border_color);
+
+    uint8_t font_height = font_size;
+    uint8_t font_width = font_size / 2;
+    uint16_t text_width = strlen(text) * font_width;
+
+    // Align text center
+    uint16_t start_x = x1;
+    if (width > text_width) {
+        start_x = x1 + (width - text_width) / 2;
+    }
+
+    uint16_t start_y = y1;
+    if (height > font_height) {
+        start_y = y1 + (height - font_height) / 2;
+    }
+
+    lcd_show_string(start_x, start_y, text, text_color, background_color, font_size, 0);
+}

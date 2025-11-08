@@ -102,6 +102,11 @@ void lcd_show_int_num(uint16_t x, uint16_t y, uint16_t num, uint8_t len,
 void lcd_show_float_num(uint16_t x, uint16_t y, float num, uint8_t len,
 		uint16_t fc, uint16_t bc, uint8_t sizey);
 
+// Show button
+void lcd_draw_button_with_text(uint16_t x1, uint16_t y1, uint16_t width, uint16_t height,
+        char* text, uint8_t font_size, uint16_t border_color, uint16_t text_color,
+		uint16_t background_color);
+
 // Init LCD
 void lcd_init(void);
 
