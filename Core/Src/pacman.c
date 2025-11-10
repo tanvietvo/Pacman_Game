@@ -23,6 +23,7 @@ typedef enum DIRECTION {
 /* Struct --------------------------------------------------------------------*/
 typedef struct CELL {
 	uint8_t is_pac_dot;
+	uint8_t is_wall;
 } S_CELL;
 
 typedef struct MAZE {
@@ -63,13 +64,26 @@ void pac_dot_draw(uint8_t i, uint8_t j, uint16_t color);
 void game_draw(void);
 void game_handler(void);
 
+static int remaining_dots = 0;
+// 4 hướng (bước 2 ô để chừa 1 ô tường giữa các “phòng”)
+static const int di[4] = {-2, 2, 0, 0};
+static const int dj[4] = {0, 0, -2, 2};
+
+static inline int in_bounds(int i, int j)
+{
+	return (i >= 0 && i < MAZE_ROW_N && j >= 0 && j < MAZE_COLUMN_N);
+}
+
 /* Declare Private Support Functions -----------------------------------------*/
 uint8_t is_button_up(void);
 uint8_t is_button_down(void);
 uint8_t is_button_left(void);
 uint8_t is_button_right(void);
 void lcd_update_score(int);
-void lcd_draw_control_button();
+void lcd_draw_control_button(void);
+void maze_generate_random(void);
+static void maze_scatter_dots_and_place_spawns(void);
+static inline E_DIRECTION opposite(E_DIRECTION);
 
 /* Public Functions ----------------------------------------------------------*/
 /**
@@ -88,6 +102,7 @@ void game_init(void) {
 	lcd_draw_rectangle(MAZE_LEFT_BORDER, MAZE_TOP_BORDER, MAZE_RIGHT_BORDER, MAZE_BOTTOM_BORDER, BLACK);
 	//lcd_show_string(20, 20, "PAC-MAN", BLACK, BACKGROUND_COLOR, 16, 0);
 	//lcd_show_string(20, 250, "Score: ", BLACK, BACKGROUND_COLOR, 16, 0);
+
 	lcd_draw_control_button();
 
 	/*
@@ -97,12 +112,30 @@ void game_init(void) {
 	 * - Firstly, you have to assign suitable values to maze.cells[][].is_pac_dot.
 	 * - Then, draw all pac dots on the maze.
 	 */
-	for (int i = 0; i < MAZE_ROW_N; i++)
+	maze_generate_random();				  // sinh mê cung mới
+	maze_scatter_dots_and_place_spawns(); // rải dot + đặt spawn + cập nhật remaining_dots
+	// VẼ: tường & dot
+	for (int i = 0; i < MAZE_ROW_N; ++i)
 	{
-		for (int j = 0; j < MAZE_COLUMN_N; j++)
+		for (int j = 0; j < MAZE_COLUMN_N; ++j)
 		{
-			maze.cells[i][j].is_pac_dot = 1;
-			pac_dot_draw(i, j, PAC_DOTS_COLOR);
+			uint16_t x1 = MAZE_LEFT_BORDER + j * MAZE_CELL_WIDTH;
+			uint16_t y1 = MAZE_TOP_BORDER + i * MAZE_CELL_HEIGHT;
+			uint16_t x2 = x1 + MAZE_CELL_WIDTH - 1;
+			uint16_t y2 = y1 + MAZE_CELL_HEIGHT - 1;
+
+			if (maze.cells[i][j].is_wall)
+			{
+				lcd_fill(x1 + 1, y1 + 1, x2 - 1, y2 - 1, BLACK);
+			}
+			else
+			{
+				lcd_fill(x1 + 1, y1 + 1, x2 - 1, y2 - 1, BACKGROUND_COLOR);
+				if (maze.cells[i][j].is_pac_dot)
+				{
+					pac_dot_draw(i, j, PAC_DOTS_COLOR);
+				}
+			}
 		}
 	}
 
@@ -114,19 +147,10 @@ void game_init(void) {
 	 * - Then, draw Pac-Man in the first position.
 	 * - Remember that reset maze.cells[][] at pacman's location.
 	 */
-	 pacman.i = 0;
-	 pacman.j = 0;
-	 pacman.i_pre = 0;
-	 pacman.j_pre = 0;
-	 pacman.direction = STOP;
-	 pacman.score = 0;
-
-	 // Clear pac_dot at cell[0][0];
-	 maze.cells[pacman.i][pacman.j].is_pac_dot = 0;
-	 pac_dot_draw(pacman.i, pacman.j, BACKGROUND_COLOR);
-
-	 // Draw pacman
-	 pacman_draw(pacman.i, pacman.j, PACMAN_COLOR);
+	pacman.direction = STOP;
+	pacman.score = 0;
+	// Draw pacman
+	pacman_draw(pacman.i, pacman.j, PACMAN_COLOR);
 
 	 // Reset score
 	 led_7seg_set_digit(0, 0, 0);
@@ -190,8 +214,6 @@ void game_process(void) {
 //		// Vẽ một chuỗi rỗng (dấu cách) để đè lên
 //		lcd_show_string(10, 70, "            ", BLACK, BACKGROUND_COLOR, 16, 0);
 //	}
-//
-//	HAL_Delay(50); // Delay một chút
 }
 
 /* Private Functions ---------------------------------------------------------*/
@@ -225,7 +247,10 @@ void game_handler(void) {
 	 * 3. Check if Pac-Man has won any dots or not, then update the score.
 	 */
 	// Check the loss condition
-	if (pacman.i == ghost.i && pacman.j == ghost.j)
+	int same_tile_collision = (pacman.i == ghost.i && pacman.j == ghost.j);
+	int crossover_collision = (pacman.i == ghost.i_pre && pacman.j == ghost.j_pre) &&
+	                              (pacman.i_pre == ghost.i && pacman.j_pre == ghost.j);
+	if (same_tile_collision || crossover_collision)
 	{
 		lcd_show_string(70, 100, "GAME OVER", RED, BACKGROUND_COLOR, 24, 0);
 		HAL_Delay(2000);
@@ -238,6 +263,7 @@ void game_handler(void) {
 	{
 		maze.cells[pacman.i][pacman.j].is_pac_dot = 0;
 		pacman.score++;
+		remaining_dots--;
 
 		// Display score
 		led_7seg_set_digit(((pacman.score / 1000) % 10), 0, 0);
@@ -250,22 +276,7 @@ void game_handler(void) {
 	}
 
 	// Check the win condition
-	uint8_t dots_remaining = 0;
-	for (int i = 0; i < MAZE_ROW_N; i++)
-	{
-		for (int j = 0; j < MAZE_COLUMN_N; j++)
-		{
-			if (maze.cells[i][j].is_pac_dot == 1)
-			{
-				dots_remaining = 1;
-				break;
-			}
-		}
-		if (dots_remaining == 1)
-			break;
-	}
-
-	if (dots_remaining == 0)
+	if (remaining_dots == 0)
 	{
 		lcd_show_string(80, 100, "YOU WIN!", GREEN, BACKGROUND_COLOR, 24, 0);
 		HAL_Delay(2000);
@@ -312,46 +323,52 @@ void pacman_moving_process(void) {
 	 *
 	 */
 	// Update previous position
-	pacman.i_pre = pacman.i;
-	pacman.j_pre = pacman.j;
+	// Nếu đang STOP thì thôi
+	if (pacman.direction == STOP)
+		return;
 
-	switch (pacman.direction) {
+	int ni = pacman.i;
+	int nj = pacman.j;
+
+	// 1) Tính ô đích theo hướng hiện tại
+	switch (pacman.direction)
+	{
 	case UP:
-		if (pacman.i <= 0)
-			pacman.direction = STOP;
-		else
-			pacman.i--;
+		ni = pacman.i - 1;
 		break;
-
 	case DOWN:
-		if (pacman.i >= MAZE_ROW_N - 1)
-			pacman.direction = STOP;
-		else
-			pacman.i++;
+		ni = pacman.i + 1;
 		break;
-
 	case LEFT:
-		if (pacman.j <= 0)
-			pacman.direction = STOP;
-		else
-			pacman.j--;
+		nj = pacman.j - 1;
 		break;
-
 	case RIGHT:
-		if (pacman.j >= MAZE_COLUMN_N - 1)
-			pacman.direction = STOP;
-		else
-			pacman.j++;
+		nj = pacman.j + 1;
 		break;
-
-	case STOP:
-		// pacman.direction = STOP;
-		break;
-
 	default:
 		pacman.direction = STOP;
-		break;
+		return;
 	}
+
+	// 2) Biên: nếu vượt lưới thì dừng
+	if (ni < 0 || ni >= MAZE_ROW_N || nj < 0 || nj >= MAZE_COLUMN_N)
+	{
+		//pacman.direction = STOP;
+		return;
+	}
+
+	// 3) Tường: nếu ô đích là tường thì dừng (không đổi vị trí)
+	if (maze.cells[ni][nj].is_wall)
+	{
+		//pacman.direction = STOP;
+		return;
+	}
+
+	// 4) Hợp lệ: commit di chuyển
+	pacman.i_pre = pacman.i;
+	pacman.j_pre = pacman.j;
+	pacman.i = ni;
+	pacman.j = nj;
 }
 
 void ghost_direction_process(void) {
@@ -361,31 +378,81 @@ void ghost_direction_process(void) {
 	 * Make Ghost move randomly.
 	 * Hint: Change direction randomly.
 	 */
-	static E_DIRECTION new_direction;
-	new_direction = (E_DIRECTION) (rand() % 4); // Random 0-3 in enum
+	// Nếu STOP: chọn 1 hướng hợp lệ để khởi động
+	if (ghost.direction == STOP)
+	{
+		E_DIRECTION cand[4];
+		int n = 0;
+		if (ghost.i > 0 && !maze.cells[ghost.i - 1][ghost.j].is_wall)
+			cand[n++] = UP;
+		if (ghost.i < MAZE_ROW_N - 1 && !maze.cells[ghost.i + 1][ghost.j].is_wall)
+			cand[n++] = DOWN;
+		if (ghost.j > 0 && !maze.cells[ghost.i][ghost.j - 1].is_wall)
+			cand[n++] = LEFT;
+		if (ghost.j < MAZE_COLUMN_N - 1 && !maze.cells[ghost.i][ghost.j + 1].is_wall)
+			cand[n++] = RIGHT;
+		ghost.direction = (n > 0) ? cand[rand() % n] : STOP;
+		return;
+	}
 
-	switch (ghost.direction) {
+	// Thỉnh thoảng rẽ ở ngã ba/ tư
+	int branches = 0;
+	if (ghost.i > 0 && !maze.cells[ghost.i - 1][ghost.j].is_wall && opposite(ghost.direction) != UP)
+		branches++;
+	if (ghost.i < MAZE_ROW_N - 1 && !maze.cells[ghost.i + 1][ghost.j].is_wall && opposite(ghost.direction) != DOWN)
+		branches++;
+	if (ghost.j > 0 && !maze.cells[ghost.i][ghost.j - 1].is_wall && opposite(ghost.direction) != LEFT)
+		branches++;
+	if (ghost.j < MAZE_COLUMN_N - 1 && !maze.cells[ghost.i][ghost.j + 1].is_wall && opposite(ghost.direction) != RIGHT)
+		branches++;
+	int want_turn = (branches >= 1 && (rand() % 100) < 20); // 20% rẽ
+
+	// Nếu phía trước là tường/ra biên hoặc muốn rẽ → chọn hướng hợp lệ, tránh U-turn nếu có thể
+	int ni = ghost.i, nj = ghost.j;
+	switch (ghost.direction)
+	{
 	case UP:
-
+		ni--;
 		break;
-
 	case DOWN:
-
+		ni++;
 		break;
-
 	case LEFT:
-
+		nj--;
 		break;
-
 	case RIGHT:
-
+		nj++;
 		break;
-
 	default:
 		break;
 	}
+	int forward_blocked = (ni < 0 || ni >= MAZE_ROW_N || nj < 0 || nj >= MAZE_COLUMN_N || maze.cells[ni][nj].is_wall);
 
-	ghost.direction = new_direction;
+	if (forward_blocked || want_turn)
+	{
+		E_DIRECTION cand[4];
+		int n = 0, opp = opposite(ghost.direction);
+		if (ghost.i > 0 && !maze.cells[ghost.i - 1][ghost.j].is_wall && UP != opp)
+			cand[n++] = UP;
+		if (ghost.i < MAZE_ROW_N - 1 && !maze.cells[ghost.i + 1][ghost.j].is_wall && DOWN != opp)
+			cand[n++] = DOWN;
+		if (ghost.j > 0 && !maze.cells[ghost.i][ghost.j - 1].is_wall && LEFT != opp)
+			cand[n++] = LEFT;
+		if (ghost.j < MAZE_COLUMN_N - 1 && !maze.cells[ghost.i][ghost.j + 1].is_wall && RIGHT != opp)
+			cand[n++] = RIGHT;
+		if (n == 0)
+		{ // bí thì quay đầu
+			if (ghost.i > 0 && !maze.cells[ghost.i - 1][ghost.j].is_wall)
+				cand[n++] = UP;
+			if (ghost.i < MAZE_ROW_N - 1 && !maze.cells[ghost.i + 1][ghost.j].is_wall)
+				cand[n++] = DOWN;
+			if (ghost.j > 0 && !maze.cells[ghost.i][ghost.j - 1].is_wall)
+				cand[n++] = LEFT;
+			if (ghost.j < MAZE_COLUMN_N - 1 && !maze.cells[ghost.i][ghost.j + 1].is_wall)
+				cand[n++] = RIGHT;
+		}
+		ghost.direction = (n > 0) ? cand[rand() % n] : STOP;
+	}
 }
 
 void ghost_moving_process(void) {
@@ -397,43 +464,33 @@ void ghost_moving_process(void) {
 	ghost.i_pre = ghost.i;
 	ghost.j_pre = ghost.j;
 
-	switch (ghost.direction) {
+	int ni = ghost.i, nj = ghost.j;
+	switch (ghost.direction)
+	{
 	case UP:
-		if (ghost.i <= 0)
-			ghost.direction = STOP;
-		else
-			ghost.i--;
+		ni--;
 		break;
-
 	case DOWN:
-		if (ghost.i >= MAZE_ROW_N - 1)
-			ghost.direction = STOP;
-		else
-			ghost.i++;
+		ni++;
 		break;
-
 	case LEFT:
-		if (ghost.j <= 0)
-			ghost.direction = STOP;
-		else
-			ghost.j--;
+		nj--;
 		break;
-
 	case RIGHT:
-		if (ghost.j >= MAZE_COLUMN_N - 1)
-			ghost.direction = STOP;
-		else
-			ghost.j++;
+		nj++;
 		break;
-
-	case STOP:
-		ghost.direction = (E_DIRECTION) (rand() % 4);
-		break;
-
 	default:
-		ghost.direction = STOP;
-		break;
+		return;
 	}
+
+	if (ni < 0 || ni >= MAZE_ROW_N || nj < 0 || nj >= MAZE_COLUMN_N || maze.cells[ni][nj].is_wall)
+	{
+		ghost.direction = STOP; // sẽ chọn hướng mới ở tick sau
+		return;
+	}
+
+	ghost.i = ni;
+	ghost.j = nj;
 }
 
 void pac_dot_draw(uint8_t i, uint8_t j, uint16_t color) {
@@ -502,7 +559,10 @@ uint8_t is_button_up(void) {
 	 * TO DO
 	 */
 	if (button_count[1] > 0)
+	{
+		button_count[1]--;
 		return 1;
+	}
 	return 0;
 }
 
@@ -511,7 +571,10 @@ uint8_t is_button_down(void) {
 	 * TO DO
 	 */
 	if (button_count[5] > 0)
+	{
+		button_count[5]--;
 		return 1;
+	}
 	return 0;
 }
 
@@ -520,7 +583,10 @@ uint8_t is_button_left(void) {
 	 * TO DO
 	 */
 	if (button_count[4] > 0)
+	{
+		button_count[4]--;
 		return 1;
+	}
 	return 0;
 }
 
@@ -529,7 +595,10 @@ uint8_t is_button_right(void) {
 	 * TO DO
 	 */
 	if (button_count[6] > 0)
+	{
+		button_count[6]--;
 		return 1;
+	}
 	return 0;
 }
 
@@ -567,4 +636,171 @@ void lcd_draw_control_button()
 //	lcd_draw_rectangle(100, 275, 140, 315, BLACK); // BOTTOM
 //	lcd_draw_rectangle(150, 275, 190, 315, BLACK); // RIGHT
 //	lcd_draw_rectangle(100, 225, 140, 265, BLACK); // UP
+}
+
+void maze_generate_random(void)
+{
+	// 1) fill toàn tường
+	for (int i = 0; i < MAZE_ROW_N; ++i)
+	{
+		for (int j = 0; j < MAZE_COLUMN_N; ++j)
+		{
+			maze.cells[i][j].is_wall = 1;
+			maze.cells[i][j].is_pac_dot = 0;
+		}
+	}
+
+	// 2) chọn start ở chỉ số lẻ (ô “phòng”), để đảm bảo lưới có tường xen kẽ
+	int si = (rand() % (MAZE_ROW_N / 2)) * 2 + 1;
+	int sj = (rand() % (MAZE_COLUMN_N / 2)) * 2 + 1;
+	if (si >= MAZE_ROW_N)
+		si = MAZE_ROW_N - 2;
+	if (sj >= MAZE_COLUMN_N)
+		sj = MAZE_COLUMN_N - 2;
+
+	// 3) DFS ngẫu nhiên với stack nhỏ
+	typedef struct
+	{
+		int i, j;
+	} Node;
+	Node stack[MAZE_ROW_N * MAZE_COLUMN_N];
+	int top = 0;
+
+	maze.cells[si][sj].is_wall = 0;
+	stack[top++] = (Node){si, sj};
+
+	while (top > 0)
+	{
+		Node cur = stack[top - 1];
+
+		// liệt kê các hướng hợp lệ (đi 2 ô, đích chưa khắc)
+		int dirs[4] = {0, 1, 2, 3};
+		// xáo trộn 4 hướng
+		for (int k = 3; k > 0; --k)
+		{
+			int r = rand() % (k + 1);
+			int t = dirs[k];
+			dirs[k] = dirs[r];
+			dirs[r] = t;
+		}
+
+		int moved = 0;
+		for (int k = 0; k < 4; ++k)
+		{
+			int ni = cur.i + di[dirs[k]];
+			int nj = cur.j + dj[dirs[k]];
+			if (!in_bounds(ni, nj))
+				continue;
+			if (maze.cells[ni][nj].is_wall == 0)
+				continue; // đã khắc rồi
+
+			// đục bức tường ở giữa
+			int wi = cur.i + (di[dirs[k]] / 2);
+			int wj = cur.j + (dj[dirs[k]] / 2);
+			maze.cells[wi][wj].is_wall = 0;
+			// khắc ô đích
+			maze.cells[ni][nj].is_wall = 0;
+
+			// tiến tới ô đích
+			stack[top++] = (Node){ni, nj};
+			moved = 1;
+			break;
+		}
+
+		if (!moved)
+		{
+			// không còn hướng đi → backtrack
+			--top;
+		}
+	}
+}
+
+static void maze_scatter_dots_and_place_spawns(void)
+{
+	remaining_dots = 0;
+
+	for (int i = 0; i < MAZE_ROW_N; ++i)
+	{
+		for (int j = 0; j < MAZE_COLUMN_N; ++j)
+		{
+			if (!maze.cells[i][j].is_wall)
+			{
+				maze.cells[i][j].is_pac_dot = 1;
+				remaining_dots++;
+			}
+			else
+			{
+				maze.cells[i][j].is_pac_dot = 0;
+			}
+		}
+	}
+
+	// đặt Pac-Man ở 1 ô trống (ví dụ góc trên trái khả dụng)
+	int pi = 1, pj = 1;
+	if (maze.cells[pi][pj].is_wall)
+	{
+		// tìm ô trống gần nhất
+		for (int i = 1; i < MAZE_ROW_N; i += 2)
+		{
+			for (int j = 1; j < MAZE_COLUMN_N; j += 2)
+			{
+				if (!maze.cells[i][j].is_wall)
+				{
+					pi = i;
+					pj = j;
+					goto FOUND_P;
+				}
+			}
+		}
+	}
+FOUND_P:
+	pacman.i = pacman.i_pre = pi;
+	pacman.j = pacman.j_pre = pj;
+
+	// không để dot dưới chân Pac-Man
+	if (maze.cells[pi][pj].is_pac_dot)
+	{
+		maze.cells[pi][pj].is_pac_dot = 0;
+		remaining_dots--;
+	}
+
+	// đặt Ghost ở một ô trống xa xa (vd. góc dưới phải khả dụng)
+	int gi = MAZE_ROW_N - 2, gj = MAZE_COLUMN_N - 2;
+	if (maze.cells[gi][gj].is_wall || (gi == pi && gj == pj))
+	{
+		// tìm ô trống khác
+		for (int i = MAZE_ROW_N - 2; i >= 1; i -= 2)
+		{
+			for (int j = MAZE_COLUMN_N - 2; j >= 1; j -= 2)
+			{
+				if (!maze.cells[i][j].is_wall && !(i == pi && j == pj))
+				{
+					gi = i;
+					gj = j;
+					goto FOUND_G;
+				}
+			}
+		}
+	}
+FOUND_G:
+	ghost.i = ghost.i_pre = gi;
+	ghost.j = ghost.j_pre = gj;
+	ghost.direction = STOP; // để hàm ghost_direction_process() chọn hướng hợp lệ
+}
+
+static inline E_DIRECTION opposite(E_DIRECTION d)
+{
+	switch (d)
+	{
+	case UP:
+		return DOWN;
+	case DOWN:
+		return UP;
+	case LEFT:
+		return RIGHT;
+	case RIGHT:
+		return LEFT;
+	default:
+		return STOP;
+	}
 }

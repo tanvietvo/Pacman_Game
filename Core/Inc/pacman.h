@@ -9,10 +9,10 @@
 #include <stdint.h>
 
 /* Constants */
-#define MAZE_COLUMN_N      		10
-#define MAZE_ROW_N         		9
-#define MAZE_CELL_WIDTH    		20
-#define MAZE_CELL_HEIGHT        20
+#define MAZE_COLUMN_N      		20
+#define MAZE_ROW_N         		18
+#define MAZE_CELL_WIDTH    		10
+#define MAZE_CELL_HEIGHT        10
 
 #define MAZE_TOP_BORDER			35
 #define MAZE_BOTTOM_BORDER 		215 // 20*9+35
