@@ -535,7 +535,7 @@ void pacman_draw(uint8_t i, uint8_t j, uint16_t color) {
 	else
 	{
 		// Draw pacman in circle (r = 8)
-		lcd_draw_circle(x_center, y_center, color, 8, 1);
+		lcd_draw_circle(x_center, y_center, color, 3, 1);
 	}
 }
 
