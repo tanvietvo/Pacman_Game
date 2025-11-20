@@ -87,6 +87,7 @@ void lcd_draw_rectangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2,
 void lcd_show_picture(uint16_t x, uint16_t y, uint16_t length, uint16_t width,
 		const uint8_t pic[]);
 void lcd_draw_circle(int xc, int yc, uint16_t c, int r, int fill);
+void lcd_dim_area(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2);
 
 // Show char and string
 void lcd_show_char(uint16_t x, uint16_t y, uint8_t character, uint16_t fc,

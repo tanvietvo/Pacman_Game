@@ -492,6 +492,7 @@ void lcd_draw_button_with_text(uint16_t x1, uint16_t y1, uint16_t width, uint16_
                                char* text, uint8_t font_size,
                                uint16_t border_color, uint16_t text_color, uint16_t background_color)
 {
+	lcd_fill(x1, y1, x1 + width, y1 + height, background_color);
     lcd_draw_rectangle(x1, y1, x1 + width, y1 + height, border_color);
 
     uint8_t font_height = font_size;
@@ -500,14 +501,24 @@ void lcd_draw_button_with_text(uint16_t x1, uint16_t y1, uint16_t width, uint16_
 
     // Align text center
     uint16_t start_x = x1;
-    if (width > text_width) {
+    if (width > text_width)
         start_x = x1 + (width - text_width) / 2;
-    }
 
     uint16_t start_y = y1;
-    if (height > font_height) {
+    if (height > font_height)
         start_y = y1 + (height - font_height) / 2;
-    }
 
     lcd_show_string(start_x, start_y, text, text_color, background_color, font_size, 0);
+}
+
+void lcd_dim_area(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2)
+{
+    for (uint16_t j = y1; j <= y2; j++)
+    {
+        for (uint16_t i = x1; i <= x2; i++)
+        {
+            if ((i + j) % 2 == 0)
+                lcd_draw_point(i, j, BLACK);
+        }
+    }
 }

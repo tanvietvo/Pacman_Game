@@ -5,6 +5,8 @@
 #ifndef INC_PICTURE_H_
 #define INC_PICTURE_H_
 
+#include "stdint.h"
+
 /* Variables */
 extern const unsigned char gImageLogo[16200];
 extern const unsigned char gImagePic[86400];

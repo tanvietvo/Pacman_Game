@@ -44,8 +44,48 @@
 #define BTN_RIGHT_X2            (BTN_RIGHT_X1 + BTN_SIZE)
 #define BTN_RIGHT_Y2            (BTN_RIGHT_Y1 + BTN_SIZE)
 
+#define BTN_PAUSE_WIDTH         35
+#define BTN_PAUSE_HEIGHT        25
+#define BTN_PAUSE_X2            (lcddev.width - 5)
+#define BTN_PAUSE_Y1 			5
+#define BTN_PAUSE_X1 			(BTN_PAUSE_X2 - BTN_PAUSE_WIDTH)
+#define BTN_PAUSE_Y2 			(BTN_PAUSE_Y1 + BTN_PAUSE_HEIGHT)
+#define BTN_PAUSE_FONT_SIZE     12
+
+#define BTN_HOME_WIDTH          35
+#define BTN_HOME_HEIGHT         25
+#define BTN_HOME_X1             5
+#define BTN_HOME_Y1             5
+#define BTN_HOME_X2             (BTN_HOME_X1 + BTN_HOME_WIDTH)
+#define BTN_HOME_Y2             (BTN_HOME_Y1 + BTN_HOME_HEIGHT)
+#define BTN_HOME_FONT_SIZE      12
+
+#define BTN_PLAY_X1             70
+#define BTN_PLAY_Y1             180
+#define BTN_PLAY_WIDTH          100
+#define BTN_PLAY_HEIGHT         50
+#define BTN_PLAY_X2             (BTN_PLAY_X1 + BTN_PLAY_WIDTH)
+#define BTN_PLAY_Y2             (BTN_PLAY_Y1 + BTN_PLAY_HEIGHT)
+#define BTN_PLAY_FONT_SIZE      24
+
+typedef enum
+{
+	STATE_HOME,
+	STATE_GAME_INIT,
+	STATE_GAME_PLAYING,
+	STATE_GAME_PAUSED,
+	STATE_GAME_WIN,
+	STATE_GAME_OVER
+} E_GAME_STATE;
+
+extern E_GAME_STATE current_state;
+
 /* Functions */
 void game_init(void);
 void game_process(void);
+void game_loop_tick();
+void game_set_state(E_GAME_STATE);
 
-#endif /* INC_BUTTON_H_ */
+void home_screen_init();
+
+#endif /* INC_PACMAN_H_ */

@@ -63,6 +63,7 @@ void pac_dot_draw(uint8_t i, uint8_t j, uint16_t color);
 // Game Engine object
 void game_draw(void);
 void game_handler(void);
+void game_pause_process(void);
 
 static int remaining_dots = 0;
 // 4 hướng (bước 2 ô để chừa 1 ô tường giữa các “phòng”)
@@ -79,11 +80,17 @@ uint8_t is_button_up(void);
 uint8_t is_button_down(void);
 uint8_t is_button_left(void);
 uint8_t is_button_right(void);
+
 void lcd_update_score(int);
 void lcd_draw_control_button(void);
+void lcd_draw_pause_button(void);
+void lcd_draw_home_button(void);
+
 void maze_generate_random(void);
 static void maze_scatter_dots_and_place_spawns(void);
 static inline E_DIRECTION opposite(E_DIRECTION);
+
+void home_screen_process(void);
 
 /* Public Functions ----------------------------------------------------------*/
 /**
@@ -100,10 +107,10 @@ void game_init(void) {
 	 */
 	lcd_clear(BACKGROUND_COLOR);
 	lcd_draw_rectangle(MAZE_LEFT_BORDER, MAZE_TOP_BORDER, MAZE_RIGHT_BORDER, MAZE_BOTTOM_BORDER, BLACK);
-	//lcd_show_string(20, 20, "PAC-MAN", BLACK, BACKGROUND_COLOR, 16, 0);
-	//lcd_show_string(20, 250, "Score: ", BLACK, BACKGROUND_COLOR, 16, 0);
 
 	lcd_draw_control_button();
+	lcd_draw_pause_button();
+	lcd_draw_home_button();
 
 	/*
 	 * TO DO
@@ -112,7 +119,7 @@ void game_init(void) {
 	 * - Firstly, you have to assign suitable values to maze.cells[][].is_pac_dot.
 	 * - Then, draw all pac dots on the maze.
 	 */
-	maze_generate_random();				  // sinh mê cung mới
+	maze_generate_random();
 	maze_scatter_dots_and_place_spawns(); // rải dot + đặt spawn + cập nhật remaining_dots
 	// VẼ: tường & dot
 	for (int i = 0; i < MAZE_ROW_N; ++i)
@@ -186,6 +193,32 @@ void game_process(void) {
 
 	pacman_direction_process(); // Put this function here to read buttons. (every 50ms)
 
+	uint16_t x, y;
+	if (touch_get_calibrated_xy(&x, &y))
+	{
+		if ((x >= BTN_HOME_X1 && x <= BTN_HOME_X2) && (y >= BTN_HOME_Y1 && y <= BTN_HOME_Y2))
+		{
+			lcd_clear(BACKGROUND_COLOR);
+			game_set_state(STATE_HOME);
+			home_screen_init();
+			return;
+		}
+
+		if ((x >= BTN_PAUSE_X1 && x <= BTN_PAUSE_X2) && (y >= BTN_PAUSE_Y1 && y <= BTN_PAUSE_Y2))
+		{
+			lcd_dim_area(MAZE_LEFT_BORDER, MAZE_TOP_BORDER, MAZE_RIGHT_BORDER, MAZE_BOTTOM_BORDER);
+			char *pause_string = "Tap to continue...";
+			uint8_t pause_string_font_size = 24;
+			uint8_t pause_string_font_width = pause_string_font_size / 2;
+			uint16_t pause_string_width = strlen(pause_string) * pause_string_font_width;
+			uint16_t pause_string_x = (lcddev.width - pause_string_width) / 2;
+			uint16_t pause_string_y = (MAZE_BOTTOM_BORDER - MAZE_TOP_BORDER) / 2 + pause_string_font_size;
+			lcd_show_string(pause_string_x, pause_string_y, pause_string, RED, WHITE, pause_string_font_size, 0);
+			game_set_state(STATE_GAME_PAUSED);
+			return;
+		}
+	}
+
 	if (counter_game == 0) {
 		pacman_moving_process();
 		ghost_direction_process();
@@ -252,9 +285,15 @@ void game_handler(void) {
 	                              (pacman.i_pre == ghost.i && pacman.j_pre == ghost.j);
 	if (same_tile_collision || crossover_collision)
 	{
-		lcd_show_string(70, 100, "GAME OVER", RED, BACKGROUND_COLOR, 24, 0);
-		HAL_Delay(2000);
-		game_init(); // Start over
+		char *lose = "GAME OVER!";
+		uint8_t lose_font_size = 24;
+		uint8_t lose_font_width = lose_font_size / 2;
+		uint16_t lose_width = strlen(lose) * lose_font_width;
+		uint16_t lose_x = (lcddev.width - lose_width) / 2;
+		uint16_t lose_y = (MAZE_BOTTOM_BORDER - MAZE_TOP_BORDER) / 2 + lose_font_size;
+		lcd_show_string(lose_x, lose_y, lose, RED, WHITE, lose_font_size, 0);
+
+		current_state = STATE_GAME_OVER;
 		return;
 	}
 
@@ -278,10 +317,98 @@ void game_handler(void) {
 	// Check the win condition
 	if (remaining_dots == 0)
 	{
-		lcd_show_string(80, 100, "YOU WIN!", GREEN, BACKGROUND_COLOR, 24, 0);
-		HAL_Delay(2000);
-		game_init(); // Start over
+		char *win = "YOU WIN!";
+		uint8_t win_font_size = 24;
+		uint8_t win_font_width = win_font_size / 2;
+		uint16_t win_width = strlen(win) * win_font_width;
+		uint16_t win_x = (lcddev.width - win_width) / 2;
+		uint16_t win_y = (MAZE_BOTTOM_BORDER - MAZE_TOP_BORDER) / 2 + win_font_size;
+		lcd_show_string(win_x, win_y, win, RED, WHITE, win_font_size, 0);
+
+		current_state = STATE_GAME_WIN;
 		return;
+	}
+}
+
+void game_loop_tick()
+{
+	static uint8_t delay_counter = 0;
+	switch(current_state)
+	{
+		case STATE_HOME:
+			home_screen_process();
+			break;
+
+		case STATE_GAME_INIT:
+			game_init();
+			current_state = STATE_GAME_PLAYING;
+			break;
+
+		case STATE_GAME_PLAYING:
+			button_scan();
+			game_process();
+			break;
+
+		case STATE_GAME_PAUSED:
+			game_pause_process();
+			break;
+
+		case STATE_GAME_WIN:
+			delay_counter++;
+			if (delay_counter >= 40)
+			{
+				game_set_state(STATE_HOME);
+				delay_counter = 0;
+			}
+			break;
+
+		case STATE_GAME_OVER:
+			delay_counter++;
+			if (delay_counter >= 40)
+			{
+				game_set_state(STATE_GAME_INIT);
+				delay_counter = 0;
+			}
+			break;
+	}
+}
+
+void game_set_state(E_GAME_STATE new_state)
+{
+	current_state = new_state;
+}
+
+void game_pause_process()
+{
+	uint16_t x, y;
+	if (touch_get_calibrated_xy(&x, &y))
+	{
+		lcd_fill(MAZE_LEFT_BORDER + 1, MAZE_TOP_BORDER + 1, MAZE_RIGHT_BORDER - 1, MAZE_BOTTOM_BORDER - 1, BACKGROUND_COLOR);
+
+		for (int i = 0; i < MAZE_ROW_N; ++i)
+		{
+			for (int j = 0; j < MAZE_COLUMN_N; ++j)
+			{
+				uint16_t x1 = MAZE_LEFT_BORDER + j * MAZE_CELL_WIDTH;
+				uint16_t y1 = MAZE_TOP_BORDER + i * MAZE_CELL_HEIGHT;
+				uint16_t x2 = x1 + MAZE_CELL_WIDTH - 1;
+				uint16_t y2 = y1 + MAZE_CELL_HEIGHT - 1;
+
+				if (maze.cells[i][j].is_wall)
+				{
+					lcd_fill(x1 + 1, y1 + 1, x2 - 1, y2 - 1, BLACK);
+				}
+				else if (maze.cells[i][j].is_pac_dot)
+				{
+					pac_dot_draw(i, j, PAC_DOTS_COLOR);
+				}
+			}
+		}
+
+		pacman_draw(pacman.i, pacman.j, PACMAN_COLOR);
+		ghost_draw(ghost.i, ghost.j, GHOST_COLOR);
+
+		game_set_state(STATE_GAME_PLAYING);
 	}
 }
 
@@ -291,19 +418,10 @@ void pacman_direction_process(void) {
 	 *
 	 * Let user use button to control Pac-Man.
 	 */
-	if (is_button_up())
-		pacman.direction = UP;
-	else if (is_button_down())
-		pacman.direction = DOWN;
-	else if (is_button_left())
-		pacman.direction = LEFT;
-	else if (is_button_right())
-		pacman.direction = RIGHT;
-
 	uint16_t x, y;
-	// Check whether touch inside of the btn
 	if (touch_get_calibrated_xy(&x, &y))
 	{
+		// Check whether touch inside of the btn
 		if ((x >= BTN_UP_X1 && x <= BTN_UP_X2) && (y >= BTN_UP_Y1 && y <= BTN_UP_Y2))
 			pacman.direction = UP;
 		else if ((x >= BTN_DOWN_X1 && x <= BTN_DOWN_X2) && (y >= BTN_DOWN_Y1 && y <= BTN_DOWN_Y2))
@@ -313,6 +431,15 @@ void pacman_direction_process(void) {
 		else if ((x >= BTN_RIGHT_X1 && x <= BTN_RIGHT_X2) && (y >= BTN_RIGHT_Y1 && y <= BTN_RIGHT_Y2))
 			pacman.direction = RIGHT;
 	}
+
+	if (is_button_up())
+		pacman.direction = UP;
+	else if (is_button_down())
+		pacman.direction = DOWN;
+	else if (is_button_left())
+		pacman.direction = LEFT;
+	else if (is_button_right())
+		pacman.direction = RIGHT;
 }
 
 void pacman_moving_process(void) {
@@ -534,7 +661,7 @@ void pacman_draw(uint8_t i, uint8_t j, uint16_t color) {
 	}
 	else
 	{
-		// Draw pacman in circle (r = 8)
+		// Draw pacman in circle (r = 3)
 		lcd_draw_circle(x_center, y_center, color, 3, 1);
 	}
 }
@@ -619,7 +746,10 @@ void lcd_update_score(int score)
 	else
 		start_x = 0;
 
-	lcd_fill(0, start_y, lcddev.width - 1, start_y + font_size, BACKGROUND_COLOR);
+	uint16_t clear_x1 = BTN_HOME_X2 + 2;
+	uint16_t clear_x2 = BTN_PAUSE_X1 - 2;
+
+	lcd_fill(clear_x1, start_y, clear_x2, start_y + font_size, BACKGROUND_COLOR);
 	lcd_show_string(start_x, start_y, text_buffer, BLACK, BACKGROUND_COLOR, font_size, 0);
 }
 
@@ -627,15 +757,35 @@ void lcd_draw_control_button()
 {
 	uint8_t  font_size = 12;
 
-	lcd_draw_button_with_text(BTN_UP_X1, BTN_UP_Y1, BTN_SIZE, BTN_SIZE, "UP", font_size, BLACK, BLACK, BACKGROUND_COLOR);
-	lcd_draw_button_with_text(BTN_LEFT_X1, BTN_LEFT_Y1, BTN_SIZE, BTN_SIZE, "LEFT", font_size, BLACK, BLACK, BACKGROUND_COLOR);
-	lcd_draw_button_with_text(BTN_DOWN_X1, BTN_DOWN_Y1, BTN_SIZE, BTN_SIZE, "DOWN", font_size, BLACK, BLACK, BACKGROUND_COLOR);
-	lcd_draw_button_with_text(BTN_RIGHT_X1, BTN_RIGHT_Y1, BTN_SIZE, BTN_SIZE, "RIGHT", font_size, BLACK, BLACK, BACKGROUND_COLOR);
+	lcd_draw_button_with_text(BTN_UP_X1, BTN_UP_Y1, BTN_SIZE, BTN_SIZE, "UP", font_size, GRAY, WHITE, GRAY);
+	lcd_draw_button_with_text(BTN_LEFT_X1, BTN_LEFT_Y1, BTN_SIZE, BTN_SIZE, "LEFT", font_size, GRAY, WHITE, GRAY);
+	lcd_draw_button_with_text(BTN_DOWN_X1, BTN_DOWN_Y1, BTN_SIZE, BTN_SIZE, "DOWN", font_size, GRAY, WHITE, GRAY);
+	lcd_draw_button_with_text(BTN_RIGHT_X1, BTN_RIGHT_Y1, BTN_SIZE, BTN_SIZE, "RIGHT", font_size, GRAY, WHITE, GRAY);
+}
 
-//	lcd_draw_rectangle(50, 275, 90, 315, BLACK); // LEFT
-//	lcd_draw_rectangle(100, 275, 140, 315, BLACK); // BOTTOM
-//	lcd_draw_rectangle(150, 275, 190, 315, BLACK); // RIGHT
-//	lcd_draw_rectangle(100, 225, 140, 265, BLACK); // UP
+void lcd_draw_pause_button()
+{
+//	lcd_fill(BTN_PAUSE_X1, BTN_PAUSE_Y1, BTN_PAUSE_X2, BTN_PAUSE_Y2, BACKGROUND_COLOR);
+//	lcd_draw_rectangle(BTN_PAUSE_X1, BTN_PAUSE_Y1, BTN_PAUSE_X2, BTN_PAUSE_Y2, BLACK);
+//
+//	uint16_t pad_x = 12;
+//	uint16_t pad_y = 8;
+//	uint16_t bar_width = 6;
+//	uint16_t bar_space = 6;
+//
+//	uint16_t x_start = BTN_PAUSE_X1 + pad_x;
+//	uint16_t y_start = BTN_PAUSE_Y1 + pad_y;
+//	uint16_t y_end = BTN_PAUSE_Y2 - pad_y;
+//
+//	lcd_fill(x_start, y_start, x_start + bar_width, y_end, BLACK);
+//	lcd_fill(x_start + bar_width + bar_space, y_start, x_start + bar_width * 2 + bar_space, y_end, BLACK);
+
+	lcd_draw_button_with_text(BTN_PAUSE_X1, BTN_PAUSE_Y1, BTN_PAUSE_WIDTH, BTN_PAUSE_HEIGHT, "PAUSE", BTN_PAUSE_FONT_SIZE, GRAY, WHITE, GRAY);
+}
+
+void lcd_draw_home_button()
+{
+	lcd_draw_button_with_text(BTN_HOME_X1, BTN_HOME_Y1, BTN_HOME_WIDTH, BTN_HOME_HEIGHT, "HOME", BTN_HOME_FONT_SIZE, GRAY, WHITE, GRAY);
 }
 
 void maze_generate_random(void)
@@ -803,4 +953,28 @@ static inline E_DIRECTION opposite(E_DIRECTION d)
 	default:
 		return STOP;
 	}
+}
+
+void home_screen_process()
+{
+	uint16_t x, y;
+	if (touch_get_calibrated_xy(&x, &y))
+	{
+		if ((x >= BTN_PLAY_X1 && x <= BTN_PLAY_X2) && (y >= BTN_PLAY_Y1 && y <= BTN_PLAY_Y2))
+			current_state = STATE_GAME_INIT;
+	}
+}
+
+void home_screen_init()
+{
+	lcd_clear(BACKGROUND_COLOR);
+	char *title = "PAC-MAN";
+	uint8_t title_font_size = 24;
+	uint8_t title_font_width = title_font_size / 2;
+	uint16_t title_width = strlen(title) * title_font_width;
+	uint16_t title_x = (lcddev.width - title_width) / 2;
+	uint16_t title_y = 100;
+
+	lcd_show_string(title_x, title_y, title, BLACK, BACKGROUND_COLOR, title_font_size, 0);
+	lcd_draw_button_with_text(BTN_PLAY_X1, BTN_PLAY_Y1, BTN_PLAY_WIDTH, BTN_PLAY_HEIGHT, "PLAY", BTN_PLAY_FONT_SIZE, GREEN, WHITE, GREEN);
 }

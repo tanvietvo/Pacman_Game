@@ -33,6 +33,7 @@
 #include "picture.h"
 #include "touch.h"
 #include "pacman.h"
+#include <stdlib.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,6 +53,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+E_GAME_STATE current_state;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -100,7 +102,7 @@ int main(void)
   MX_FSMC_Init();
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
-	init_system();
+  init_system();
 
   /* USER CODE END 2 */
 
@@ -109,9 +111,9 @@ int main(void)
 	while (1) {
 		if (timer2_flag) {
 			timer2_flag = 0;
-			button_scan();
-
-			game_process();
+			//button_scan();
+			//game_process();
+			game_loop_tick();
 		}
 	}
 
@@ -181,7 +183,11 @@ void init_system() {
 
 	touch_init();
 
-	game_init();
+	srand(HAL_GetTick());
+
+	//game_init();
+	home_screen_init();
+	game_set_state(STATE_HOME);
 }
 
 /* USER CODE END 4 */
