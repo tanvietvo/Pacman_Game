@@ -208,11 +208,15 @@ void game_process(void) {
 		{
 			lcd_dim_area(MAZE_LEFT_BORDER, MAZE_TOP_BORDER, MAZE_RIGHT_BORDER, MAZE_BOTTOM_BORDER);
 			char *pause_string = "Tap to continue...";
-			uint8_t pause_string_font_size = 24;
+			uint8_t pause_string_font_size = 16;
 			uint8_t pause_string_font_width = pause_string_font_size / 2;
 			uint16_t pause_string_width = strlen(pause_string) * pause_string_font_width;
-			uint16_t pause_string_x = (lcddev.width - pause_string_width) / 2;
-			uint16_t pause_string_y = (MAZE_BOTTOM_BORDER - MAZE_TOP_BORDER) / 2 + pause_string_font_size;
+
+			uint16_t maze_width = MAZE_RIGHT_BORDER - MAZE_LEFT_BORDER;
+			uint16_t pause_string_x = MAZE_LEFT_BORDER + (maze_width - pause_string_width) / 2;
+			uint16_t maze_height = MAZE_BOTTOM_BORDER - MAZE_TOP_BORDER;
+			uint16_t pause_string_y = MAZE_TOP_BORDER + (maze_height - pause_string_font_size) / 2;
+
 			lcd_show_string(pause_string_x, pause_string_y, pause_string, RED, WHITE, pause_string_font_size, 0);
 			game_set_state(STATE_GAME_PAUSED);
 			return;
@@ -967,6 +971,11 @@ void home_screen_process()
 
 void home_screen_init()
 {
+	led_7seg_set_digit(0, 0, 0);
+	led_7seg_set_digit(0, 1, 0);
+	led_7seg_set_digit(0, 2, 0);
+	led_7seg_set_digit(0, 3, 0);
+
 	lcd_clear(BACKGROUND_COLOR);
 	char *title = "PAC-MAN";
 	uint8_t title_font_size = 24;
