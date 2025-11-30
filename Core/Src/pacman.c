@@ -89,6 +89,7 @@ void lcd_draw_home_button(void);
 void maze_generate_random(void);
 static void maze_scatter_dots_and_place_spawns(void);
 static inline E_DIRECTION opposite(E_DIRECTION);
+static inline int manhattan_distance(int, int, int, int);
 
 void home_screen_process(void);
 
@@ -509,81 +510,42 @@ void ghost_direction_process(void) {
 	 * Make Ghost move randomly.
 	 * Hint: Change direction randomly.
 	 */
-	// Nếu STOP: chọn 1 hướng hợp lệ để khởi động
-	if (ghost.direction == STOP)
-	{
-		E_DIRECTION cand[4];
-		int n = 0;
-		if (ghost.i > 0 && !maze.cells[ghost.i - 1][ghost.j].is_wall)
-			cand[n++] = UP;
-		if (ghost.i < MAZE_ROW_N - 1 && !maze.cells[ghost.i + 1][ghost.j].is_wall)
-			cand[n++] = DOWN;
-		if (ghost.j > 0 && !maze.cells[ghost.i][ghost.j - 1].is_wall)
-			cand[n++] = LEFT;
-		if (ghost.j < MAZE_COLUMN_N - 1 && !maze.cells[ghost.i][ghost.j + 1].is_wall)
-			cand[n++] = RIGHT;
-		ghost.direction = (n > 0) ? cand[rand() % n] : STOP;
-		return;
-	}
+	const E_DIRECTION dirs[4] = {UP, DOWN, LEFT, RIGHT};
+	const int delta_i[4] = {-1, 1, 0, 0};
+	const int delta_j[4] = {0, 0, -1, 1};
 
-	// Thỉnh thoảng rẽ ở ngã ba/ tư
-	int branches = 0;
-	if (ghost.i > 0 && !maze.cells[ghost.i - 1][ghost.j].is_wall && opposite(ghost.direction) != UP)
-		branches++;
-	if (ghost.i < MAZE_ROW_N - 1 && !maze.cells[ghost.i + 1][ghost.j].is_wall && opposite(ghost.direction) != DOWN)
-		branches++;
-	if (ghost.j > 0 && !maze.cells[ghost.i][ghost.j - 1].is_wall && opposite(ghost.direction) != LEFT)
-		branches++;
-	if (ghost.j < MAZE_COLUMN_N - 1 && !maze.cells[ghost.i][ghost.j + 1].is_wall && opposite(ghost.direction) != RIGHT)
-		branches++;
-	int want_turn = (branches >= 1 && (rand() % 100) < 20); // 20% rẽ
+	E_DIRECTION best_dir = STOP;
+	int best_score = 10000;
+	E_DIRECTION opp = opposite(ghost.direction);
 
-	// Nếu phía trước là tường/ra biên hoặc muốn rẽ → chọn hướng hợp lệ, tránh U-turn nếu có thể
-	int ni = ghost.i, nj = ghost.j;
-	switch (ghost.direction)
+	for (int idx = 0; idx < 4; ++idx)
 	{
-	case UP:
-		ni--;
-		break;
-	case DOWN:
-		ni++;
-		break;
-	case LEFT:
-		nj--;
-		break;
-	case RIGHT:
-		nj++;
-		break;
-	default:
-		break;
-	}
-	int forward_blocked = (ni < 0 || ni >= MAZE_ROW_N || nj < 0 || nj >= MAZE_COLUMN_N || maze.cells[ni][nj].is_wall);
+		int ni = ghost.i + delta_i[idx];
+		int nj = ghost.j + delta_j[idx];
 
-	if (forward_blocked || want_turn)
-	{
-		E_DIRECTION cand[4];
-		int n = 0, opp = opposite(ghost.direction);
-		if (ghost.i > 0 && !maze.cells[ghost.i - 1][ghost.j].is_wall && UP != opp)
-			cand[n++] = UP;
-		if (ghost.i < MAZE_ROW_N - 1 && !maze.cells[ghost.i + 1][ghost.j].is_wall && DOWN != opp)
-			cand[n++] = DOWN;
-		if (ghost.j > 0 && !maze.cells[ghost.i][ghost.j - 1].is_wall && LEFT != opp)
-			cand[n++] = LEFT;
-		if (ghost.j < MAZE_COLUMN_N - 1 && !maze.cells[ghost.i][ghost.j + 1].is_wall && RIGHT != opp)
-			cand[n++] = RIGHT;
-		if (n == 0)
-		{ // bí thì quay đầu
-			if (ghost.i > 0 && !maze.cells[ghost.i - 1][ghost.j].is_wall)
-				cand[n++] = UP;
-			if (ghost.i < MAZE_ROW_N - 1 && !maze.cells[ghost.i + 1][ghost.j].is_wall)
-				cand[n++] = DOWN;
-			if (ghost.j > 0 && !maze.cells[ghost.i][ghost.j - 1].is_wall)
-				cand[n++] = LEFT;
-			if (ghost.j < MAZE_COLUMN_N - 1 && !maze.cells[ghost.i][ghost.j + 1].is_wall)
-				cand[n++] = RIGHT;
+		if (ni < 0 || ni >= MAZE_ROW_N || nj < 0 || nj >= MAZE_COLUMN_N)
+			continue;
+		if (maze.cells[ni][nj].is_wall)
+			continue;
+
+		int score = manhattan_distance(ni, nj, pacman.i, pacman.j);
+		if (dirs[idx] == ghost.direction)
+		{
+			score -= 1; // prefer keeping momentum when chasing
 		}
-		ghost.direction = (n > 0) ? cand[rand() % n] : STOP;
+		else if (dirs[idx] == opp)
+		{
+			score += 4; // avoid U-turns unless necessary
+		}
+
+		if (score < best_score || (score == best_score && dirs[idx] == ghost.direction))
+		{
+			best_score = score;
+			best_dir = dirs[idx];
+		}
 	}
+
+	ghost.direction = best_dir;
 }
 
 void ghost_moving_process(void) {
@@ -769,21 +731,6 @@ void lcd_draw_control_button()
 
 void lcd_draw_pause_button()
 {
-//	lcd_fill(BTN_PAUSE_X1, BTN_PAUSE_Y1, BTN_PAUSE_X2, BTN_PAUSE_Y2, BACKGROUND_COLOR);
-//	lcd_draw_rectangle(BTN_PAUSE_X1, BTN_PAUSE_Y1, BTN_PAUSE_X2, BTN_PAUSE_Y2, BLACK);
-//
-//	uint16_t pad_x = 12;
-//	uint16_t pad_y = 8;
-//	uint16_t bar_width = 6;
-//	uint16_t bar_space = 6;
-//
-//	uint16_t x_start = BTN_PAUSE_X1 + pad_x;
-//	uint16_t y_start = BTN_PAUSE_Y1 + pad_y;
-//	uint16_t y_end = BTN_PAUSE_Y2 - pad_y;
-//
-//	lcd_fill(x_start, y_start, x_start + bar_width, y_end, BLACK);
-//	lcd_fill(x_start + bar_width + bar_space, y_start, x_start + bar_width * 2 + bar_space, y_end, BLACK);
-
 	lcd_draw_button_with_text(BTN_PAUSE_X1, BTN_PAUSE_Y1, BTN_PAUSE_WIDTH, BTN_PAUSE_HEIGHT, "PAUSE", BTN_PAUSE_FONT_SIZE, GRAY, WHITE, GRAY);
 }
 
@@ -957,6 +904,13 @@ static inline E_DIRECTION opposite(E_DIRECTION d)
 	default:
 		return STOP;
 	}
+}
+
+static inline int manhattan_distance(int i1, int j1, int i2, int j2)
+{
+	int di = (i1 > i2) ? (i1 - i2) : (i2 - i1);
+	int dj = (j1 > j2) ? (j1 - j2) : (j2 - j1);
+	return di + dj;
 }
 
 void home_screen_process()
